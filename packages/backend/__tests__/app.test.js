@@ -61,4 +61,53 @@ describe('API Endpoints', () => {
       expect(response.body.error).toBe('Item name is required');
     });
   });
+
+  describe('DELETE /api/items/:id', () => {
+    it('should delete an existing item', async () => {
+      const createResponse = await request(app)
+        .post('/api/items')
+        .send({ name: 'Item To Delete' })
+        .set('Accept', 'application/json');
+
+      const response = await request(app).delete(`/api/items/${createResponse.body.id}`);
+
+      expect(response.status).toBe(204);
+
+      const itemsResponse = await request(app).get('/api/items');
+      expect(itemsResponse.body.find((item) => item.id === createResponse.body.id)).toBeUndefined();
+    });
+
+    it('should return 404 for non-existent item', async () => {
+      const response = await request(app).delete('/api/items/999999');
+
+      expect(response.status).toBe(404);
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toBe('Item not found');
+    });
+
+    it('should return 400 for invalid item id', async () => {
+      const response = await request(app).delete('/api/items/not-a-number');
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toBe('Valid item id is required');
+    });
+
+    it('should return 429 when delete requests exceed the rate limit', async () => {
+      const clientId = 'rate-limit-test-client';
+      await Promise.all(
+        Array.from({ length: 30 }, () =>
+          request(app).delete('/api/items/not-a-number').set('x-client-id', clientId)
+        )
+      );
+
+      const response = await request(app)
+        .delete('/api/items/not-a-number')
+        .set('x-client-id', clientId);
+
+      expect(response.status).toBe(429);
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toBe('Too many delete requests');
+    });
+  });
 });

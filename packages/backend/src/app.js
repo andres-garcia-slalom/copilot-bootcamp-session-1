@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const Database = require('better-sqlite3');
+const rateLimit = require('express-rate-limit');
 
 // Initialize express app
 const app = express();
@@ -32,6 +33,14 @@ initialItems.forEach(item => {
 });
 
 console.log('In-memory database initialized with sample data');
+const deleteItemLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many delete requests' },
+  keyGenerator: (req) => req.get('x-client-id') || rateLimit.ipKeyGenerator(req.ip),
+});
 
 // API Routes
 app.get('/api/items', (req, res) => {
@@ -60,6 +69,27 @@ app.post('/api/items', (req, res) => {
   } catch (error) {
     console.error('Error creating item:', error);
     res.status(500).json({ error: 'Failed to create item' });
+  }
+});
+
+app.delete('/api/items/:id', deleteItemLimiter, (req, res) => {
+  try {
+    const id = Number.parseInt(req.params.id, 10);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Valid item id is required' });
+    }
+
+    const result = db.prepare('DELETE FROM items WHERE id = ?').run(id);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting item:', error);
+    res.status(500).json({ error: 'Failed to delete item' });
   }
 });
 
