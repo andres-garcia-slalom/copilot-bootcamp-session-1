@@ -92,5 +92,17 @@ describe('API Endpoints', () => {
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toBe('Valid item id is required');
     });
+
+    it('should return 429 when delete requests exceed the rate limit', async () => {
+      for (let index = 0; index < 29; index += 1) {
+        await request(app).delete('/api/items/not-a-number');
+      }
+
+      const response = await request(app).delete('/api/items/not-a-number');
+
+      expect(response.status).toBe(429);
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toBe('Too many delete requests');
+    });
   });
 });

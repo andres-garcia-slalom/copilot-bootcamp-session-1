@@ -13,6 +13,9 @@ app.use(morgan('dev'));
 
 // Initialize in-memory SQLite database
 const db = new Database(':memory:');
+const deleteRateLimitStore = new Map();
+const DELETE_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const DELETE_RATE_LIMIT_MAX_REQUESTS = 30;
 
 // Create tables
 db.exec(`
@@ -32,6 +35,23 @@ initialItems.forEach(item => {
 });
 
 console.log('In-memory database initialized with sample data');
+
+const isDeleteRateLimited = (clientKey) => {
+  const now = Date.now();
+  const current = deleteRateLimitStore.get(clientKey);
+
+  if (!current || now - current.windowStart >= DELETE_RATE_LIMIT_WINDOW_MS) {
+    deleteRateLimitStore.set(clientKey, { windowStart: now, requestCount: 1 });
+    return false;
+  }
+
+  if (current.requestCount >= DELETE_RATE_LIMIT_MAX_REQUESTS) {
+    return true;
+  }
+
+  current.requestCount += 1;
+  return false;
+};
 
 // API Routes
 app.get('/api/items', (req, res) => {
@@ -65,6 +85,11 @@ app.post('/api/items', (req, res) => {
 
 app.delete('/api/items/:id', (req, res) => {
   try {
+    const clientKey = req.ip || req.socket?.remoteAddress || 'unknown';
+    if (isDeleteRateLimited(clientKey)) {
+      return res.status(429).json({ error: 'Too many delete requests' });
+    }
+
     const id = Number.parseInt(req.params.id, 10);
 
     if (!Number.isInteger(id) || id <= 0) {
