@@ -94,11 +94,16 @@ describe('API Endpoints', () => {
     });
 
     it('should return 429 when delete requests exceed the rate limit', async () => {
-      for (let index = 0; index < 29; index += 1) {
-        await request(app).delete('/api/items/not-a-number');
-      }
+      const clientId = 'rate-limit-test-client';
+      await Promise.all(
+        Array.from({ length: 30 }, () =>
+          request(app).delete('/api/items/not-a-number').set('x-client-id', clientId)
+        )
+      );
 
-      const response = await request(app).delete('/api/items/not-a-number');
+      const response = await request(app)
+        .delete('/api/items/not-a-number')
+        .set('x-client-id', clientId);
 
       expect(response.status).toBe(429);
       expect(response.body).toHaveProperty('error');
